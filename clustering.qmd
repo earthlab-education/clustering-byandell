@@ -8,29 +8,31 @@ format:
 # Land cover classification at the Mississppi Delta
 
 In this notebook, you will use a k-means **unsupervised** clustering
-algorithm to group pixels by similar spectral signatures. **k-means** is
-an **exploratory** method for finding patterns in data. Because it is
-unsupervised, you don’t need any training data for the model. You also
-can’t measure how well it “performs” because the clusters will not
-correspond to any particular land cover class. However, we expect at
-least some of the clusters to be identifiable as different types of land
-cover.
+algorithm to group pixels by similar spectral signatures.
+**k-means** is an **exploratory** method for finding patterns in data.
+Because it is unsupervised, you do not need any training data for the model.
+You also cannot measure how well it “performs” because the clusters will not
+correspond to any particular land cover class.
+However, we expect at least some of the clusters to be identifiable as
+different types of land cover.
 
-You will use the [harmonized Sentinal/Landsat multispectral
-dataset](https://lpdaac.usgs.gov/documents/1698/HLS_User_Guide_V2.pdf).
-You can access the data with an [Earthdata
-account](https://www.earthdata.nasa.gov/learn/get-started) and the
+You will use the
+[harmonized Sentinal/Landsat multispectral dataset](https://lpdaac.usgs.gov/documents/1698/HLS_User_Guide_V2.pdf).
+You can access the data with an
+[Earthdata account](https://www.earthdata.nasa.gov/learn/get-started)
+and the
 [`earthaccess` library from
 NSIDC](https://github.com/nsidc/earthaccess):
 
 ## STEP 1: SET UP
 
-<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
-<li>Import all libraries you will need for this analysis</li>
-<li>Configure GDAL parameters to help avoid connection errors:
-<code>python      os.environ["GDAL_HTTP_MAX_RETRY"] = "5"      os.environ["GDAL_HTTP_RETRY_DELAY"] = "1"</code></li>
-</ol></div></div>
-
+- Import all libraries you will need for this analysis
+- Configure GDAL parameters to help avoid connection errors:
+  
+```python
+os.environ["GDAL_HTTP_MAX_RETRY"] = "5"
+os.environ["GDAL_HTTP_RETRY_DELAY"] = "1"
+```
 
 ```{python}
 import os
@@ -70,12 +72,11 @@ def do_something(*args, **kwargs):
     return item_to_cache
 ```
 
-This decorator will **pickle** the results of running the
-`do_something()` function, and only run the code if the results don’t
-already exist. To override the caching, for example temporarily after
-making changes to your code, set `override=True`. Note that to use the
-caching decorator, you must write your own function to perform each
-task!
+This decorator will **pickle** the results of running the `do_something()` function,
+and only run the code if the results do not already exist.
+To override the caching, for example temporarily after
+making changes to your code, set `override=True`.
+Note that to use the caching decorator, you must write your own function to perform each task!
 
 
 ```{python}
@@ -144,16 +145,15 @@ def cached(func_key, override=False):
 
 ## STEP 2: STUDY SITE
 
-For this analysis, you will use a watershed from the [Water Boundary
-Dataset](https://www.usgs.gov/national-hydrography/access-national-hydrography-products),
-HU12 watersheds (WBDHU12.shp).
+For this analysis, you will use a watershed from the
+[Water Boundary Dataset](https://www.usgs.gov/national-hydrography/access-national-hydrography-products),
+HU12 watersheds (`W`BDHU12.shp`).
 
-<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
-<li>Download the Water Boundary Dataset for region 8 (Mississippi)</li>
-<li>Select watershed 080902030506</li>
-<li>Generate a site map of the watershed</li>
-</ol>
-<p>Try to use the <strong>caching decorator</strong></p></div></div>
+- Download the Water Boundary Dataset for region 8 (Mississippi)
+- Select watershed `080902030506`
+- Generate a site map of the watershed
+
+Try to use the **caching decorator**
 
 ```{python}
 @cached('wbd_08')
@@ -190,12 +190,13 @@ delta_gdf = (
 ```
 
 We chose this watershed because it covers parts of New Orleans an is
-near the Mississippi Delta. Deltas are boundary areas between the land
-and the ocean, and as a result tend to contain a rich variety of
+near the Mississippi Delta.
+Deltas are boundary areas between the land and the ocean,
+and as a result tend to contain a rich variety of
 different land cover and land use types.
 
-<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-response"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div></div><div class="callout-body-container callout-body"><p>Write a 2-3 sentence <strong>site description</strong> (with
-citations) of this area that helps to put your analysis in context.</p></div></div>
+Write a 2-3 sentence **site description** (with citations) of this area
+that helps to put your analysis in context.
 
 **YOUR SITE DESCRIPTION HERE**
 
@@ -203,16 +204,23 @@ citations) of this area that helps to put your analysis in context.</p></div></d
 
 ### Search for data
 
-<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
-<li>Log in to the <code>earthaccess</code> service using your Earthdata
-credentials:
-<code>python      earthaccess.login(persist=True)</code></li>
-<li>Modify the following sample code to search for granules of the
-HLSL30 product overlapping the watershed boundary from May to October
-2023 (there should be 76 granules):
-<code>python      results = earthaccess.search_data(          short_name="...",          cloud_hosted=True,          bounding_box=tuple(gdf.total_bounds),          temporal=("...", "..."),      )</code></li>
-</ol></div></div>
+- Log in to the `earthaccess` service using your Earthdata credentials:
+  
+```python
+earthaccess.login(persist=True)
+```
 
+- Modify the following sample code to search for granules of the
+`HLSL30` product overlapping the watershed boundary from May to October
+2023 (there should be 76 granules):
+
+```python
+results = earthaccess.search_data(
+    short_name="...",
+    cloud_hosted=True,
+    bounding_box=tuple(gdf.total_bounds),
+    temporal=("...", "..."))
+```
 
 ```{python}
 # Log in to earthaccess
@@ -229,33 +237,24 @@ results = earthaccess.search_data(
 ### Compile information about each granule
 
 I recommend building a GeoDataFrame, as this will allow you to plot the
-granules you are downloading and make sure they line up with your
-shapefile. You could also use a DataFrame, dictionary, or a custom
-object to store this information.
+granules you are downloading and make sure they line up with your shapefile.
+You could also use a DataFrame, dictionary, or a custom object to store this information.
 
-<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
-<li>For each search result:
-<ol type="1">
-<li>Get the following information (HINT: look at the [‘umm’] values for
+- For each search result:
+  - Get the following information (HINT: look at the [‘umm’] values for
 each search result):
-<ul>
-<li>granule id (UR)</li>
-<li>datetime</li>
-<li>geometry (HINT: check out the shapely.geometry.Polygon class to
-convert points to a Polygon)</li>
-</ul></li>
-<li>Open the granule files. I recomment opening one granule at a time,
-e.g. with (<code>earthaccess.open([result]</code>).</li>
-<li>For each file (band), get the following information:
-<ul>
-<li>file handler returned from <code>earthaccess.open()</code></li>
-<li>tile id</li>
-<li>band number</li>
-</ul></li>
-</ol></li>
-<li>Compile all the information you collected into a GeoDataFrame</li>
-</ol></div></div>
-
+    - granule id (UR)
+    - datetime
+    - geometry (HINT: check out the shapely.geometry.
+Polygon class to convert points to a Polygon)
+  - Open the granule files.
+I recomment opening one granule at a time, e.g. with
+`earthaccess.open([result]`.
+  - For each file (band), get the following information:
+    - file handler returned from `earthaccess.open()`
+    - tile id
+    - band number
+- Compile all the information you collected into a GeoDataFrame
 
 ```{python}
 def get_earthaccess_links(results):
@@ -306,40 +305,39 @@ def get_earthaccess_links(results):
 
 ### Open, crop, and mask data
 
-This will be the most resource-intensive step. I recommend caching your
-results using the `cached` decorator or by writing your own caching
-code. I also recommend testing this step with one or two dates before
+This will be the most resource-intensive step.
+I recommend caching your results using the `cached` decorator
+or by writing your own caching code.
+I also recommend testing this step with one or two dates before
 running the full computation.
 
-This code should include at least one **function** including a
-numpy-style docstring. A good place to start would be a function for
-opening a single masked raster, applying the appropriate scale
-parameter, and cropping.
+This code should include at least one **function** including a numpy-style docstring.
+A good place to start would be a function for opening a single masked raster,
+applying the appropriate scale parameter, and cropping.
 
-<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
-<li>For each granule:
-<ol type="1">
-<li><p>Open the Fmask band, crop, and compute a quality mask for the
-granule. You can use the following code as a starting point, making sure
-that <code>mask_bits</code> contains the quality bits you want to
-consider: ```python # Expand into a new dimension of binary bits bits =
-( np.unpackbits(da.astype(np.uint8), bitorder=‘little’)
-.reshape(da.shape + (-1,)) )</p>
-<p># Select the required bits and check if any are flagged mask =
-np.prod(bits[…, mask_bits]==0, axis=-1) ```</p></li>
-<li><p>For each band that starts with ‘B’:</p>
-<ol type="1">
-<li>Open the band, crop, and apply the scale factor</li>
-<li>Name the DataArray after the band using the <code>.name</code>
-attribute</li>
-<li>Apply the cloud mask using the <code>.where()</code> method</li>
-<li>Store the DataArray in your data structure (e.g. adding a
-GeoDataFrame column with the DataArray in it. Note that you will need to
-remove the rows for unused bands)</li>
-</ol></li>
-</ol></li>
-</ol></div></div>
+- For each granule:
+  - Open the Fmask band, crop, and compute a quality mask for the granule.
+You can use the following code as a starting point, making sure
+that `mask_bits` contains the quality bits you want to consider:
 
+```python
+# Expand into a new dimension of binary bits 
+bits = (
+    np.unpackbits(
+        da.astype(np.uint8), bitorder=‘little’
+    ).reshape(da.shape + (-1,))
+)
+# Select the required bits and check if any are flagged mask
+flagged mask = np.prod(bits[…, mask_bits]==0, axis=-1)
+```
+
+- For each band that starts with ‘B’:
+  - Open the band, crop, and apply the scale factor
+  - Name the DataArray after the band using the `.name` attribute
+  - Apply the cloud mask using the `.where()` method
+  - Store the DataArray in your data structure
+(e.g. adding a `GeoDataFrame` column with the `DataArray` in it.
+Note that you will need to remove the rows for unused bands)
 
 ```{python}
 @cached('delta_reflectance_da_df')
@@ -423,30 +421,21 @@ reflectance_da_df = compute_reflectance_da(results, delta_gdf)
 
 ### Merge and Composite Data
 
-You will notice for this watershed that: 1. The raster data for each
-date are spread across 4 granules 2. Any given image is incomplete
-because of clouds
+You will notice for this watershed that:
 
-<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
-<li><p>For each band:</p>
-<ol type="1">
-<li><p>For each date:</p>
-<ol type="1">
-<li>Merge all 4 granules</li>
-<li>Mask any negative values created by interpolating from the nodata
-value of -9999 (<code>rioxarray</code> should account for this, but
-doesn’t appear to when merging. If you leave these values in they will
-create problems down the line)</li>
-</ol></li>
-<li><p>Concatenate the merged DataArrays along a new date
-dimension</p></li>
-<li><p>Take the mean in the date dimension to create a composite image
-that fills cloud gaps</p></li>
-<li><p>Add the band as a dimension, and give the DataArray a
-name</p></li>
-</ol></li>
-<li><p>Concatenate along the band dimension</p></li>
-</ol></div></div>
+1. The raster data for each date are spread across 4 granules
+2. Any given image is incomplete because of clouds
+
+- For each band:
+  - For each date:
+    - Merge all 4 granules
+    - Mask any negative values created by interpolating from the nodata value of `-9999`
+(`rioxarray` should account for this, but does not appear to when merging.
+If you leave these values in they will create problems down the line.)
+  - Concatenate the merged DataArrays along a new date dimension
+  - Take the mean in the date dimension to create a composite image that fills cloud gaps
+  - Add the band as a dimension, and give the DataArray a name
+- Concatenate along the band dimension
 
 
 ```{python}
@@ -480,15 +469,11 @@ reflectance_da
 
 Cluster your data by spectral signature using the k-means algorithm.
 
-<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
-<li>Convert your DataArray into a <strong>tidy</strong> DataFrame of
-reflectance values (hint: check out the <code>.to_dataframe()</code> and
-<code>.unstack()</code> methods)</li>
-<li>Filter out all rows with no data (all 0s or any N/A values)</li>
-<li>Fit a k-means model. You can experiment with the number of groups to
-find what works best.</li>
-</ol></div></div>
-
+- Convert your DataArray into a **tidy** DataFrame of reflectance values
+(hint: check out the `.to_dataframe()` and `.unstack()` methods)
+- Filter out all rows with no data (all 0s or any N/A values)
+- Fit a k-means model. You can experiment with the number of groups to
+find what works best.
 
 ```{python}
 # Convert spectral DataArray to a tidy DataFrame
@@ -506,12 +491,13 @@ model_df
 
 ## STEP 5: PLOT
 
-<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><p>Create a plot that shows the k-means clusters next to an RGB image of
-the area. You may need to brighten your RGB image by multiplying it by
-10. The code for reshaping and plotting the clusters is provided for you
-below, but you will have to create the RGB plot yourself!</p>
-<p>So, what is <code>.sortby(['x', 'y'])</code> doing for us? Try the
-code without it and find out.</p></div></div>
+Create a plot that shows the k-means clusters next to an RGB image of
+the area. You may need to brighten your RGB image by multiplying it by 10.
+The code for reshaping and plotting the clusters is provided for you
+below, but you will have to create the RGB plot yourself!
+
+So, what is `.sortby(['x', 'y'])` doing for us? Try the
+code without it and find out.
 
 
 ```{python}
@@ -531,6 +517,6 @@ rgb_sat = rgb_bright.where(rgb_bright < 255, 255)
 )
 ```
 
-<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-respond"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Reflect and Respond</div></div><div class="callout-body-container callout-body"><p>Don’t forget to interpret your plot!</p></div></div>
+Do not forget to interpret your plot!</p></div></div>
 
 **YOUR PLOT HEADLINE AND DESCRIPTION HERE**
