@@ -1,6 +1,10 @@
 # Assignment ea-02-clustering
 
-This repository contains the notebooks for this week's assignment. Complete
+This repository contains the notebooks for this week's assignment. 
+See
+[2. Clustering: Land cover classification at the Mississippi Delta](https://cu-esiil-edu.github.io/esiil-learning-portal/foundations/notebooks/12-clustering/clustering.html).
+
+Complete
 the homework in each .ipynb notebook, commit your work, and push the changes
 to github. Your instructor will pull the completed assignment after the
 deadline.
