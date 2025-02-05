@@ -1,0 +1,368 @@
+---
+title: "Clustering Land Cover"
+format:
+  html:
+    code-fold: true
+---
+
+# Land cover classification at the Mississppi Delta
+
+In this notebook, you will use a k-means **unsupervised** clustering
+algorithm to group pixels by similar spectral signatures. **k-means** is
+an **exploratory** method for finding patterns in data. Because it is
+unsupervised, you don’t need any training data for the model. You also
+can’t measure how well it “performs” because the clusters will not
+correspond to any particular land cover class. However, we expect at
+least some of the clusters to be identifiable as different types of land
+cover.
+
+You will use the [harmonized Sentinal/Landsat multispectral
+dataset](https://lpdaac.usgs.gov/documents/1698/HLS_User_Guide_V2.pdf).
+You can access the data with an [Earthdata
+account](https://www.earthdata.nasa.gov/learn/get-started) and the
+[`earthaccess` library from
+NSIDC](https://github.com/nsidc/earthaccess):
+
+## STEP 1: SET UP
+
+<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
+<li>Import all libraries you will need for this analysis</li>
+<li>Configure GDAL parameters to help avoid connection errors:
+<code>python      os.environ["GDAL_HTTP_MAX_RETRY"] = "5"      os.environ["GDAL_HTTP_RETRY_DELAY"] = "1"</code></li>
+</ol></div></div>
+
+
+```
+import os
+import pickle
+import re
+import warnings
+
+import cartopy.crs as ccrs
+import earthaccess
+import earthpy as et
+import geopandas as gpd
+import geoviews as gv
+import hvplot.pandas
+import hvplot.xarray
+import numpy as np
+import pandas as pd
+import rioxarray as rxr
+import rioxarray.merge as rxrmerge
+from tqdm.notebook import tqdm
+import xarray as xr
+from shapely.geometry import Polygon
+from sklearn.cluster import KMeans
+
+os.environ["GDAL_HTTP_MAX_RETRY"] = "5"
+os.environ["GDAL_HTTP_RETRY_DELAY"] = "1"
+
+warnings.simplefilter('ignore')
+```
+
+Below you can find code for a caching **decorator** which you can use in
+your code. To use the decorator:
+
+``` python
+@cached(key, override)
+def do_something(*args, **kwargs):
+    ...
+    return item_to_cache
+```
+
+This decorator will **pickle** the results of running the
+`do_something()` function, and only run the code if the results don’t
+already exist. To override the caching, for example temporarily after
+making changes to your code, set `override=True`. Note that to use the
+caching decorator, you must write your own function to perform each
+task!
+
+
+```
+def cached(func_key, override=False):
+    """
+    A decorator to cache function results
+    
+    Parameters
+    ==========
+    key: str
+      File basename used to save pickled results
+    override: bool
+      When True, re-compute even if the results are already stored
+    """
+    def compute_and_cache_decorator(compute_function):
+        """
+        Wrap the caching function
+        
+        Parameters
+        ==========
+        compute_function: function
+          The function to run and cache results
+        """
+        def compute_and_cache(*args, **kwargs):
+            """
+            Perform a computation and cache, or load cached result.
+            
+            Parameters
+            ==========
+            args
+              Positional arguments for the compute function
+            kwargs
+              Keyword arguments for the compute function
+            """
+            # Add an identifier from the particular function call
+            if 'cache_key' in kwargs:
+                key = '_'.join((func_key, kwargs['cache_key']))
+            else:
+                key = func_key
+
+            path = os.path.join(
+                et.io.HOME, et.io.DATA_NAME, 'jars', f'{key}.pickle')
+            
+            # Check if the cache exists already or override caching
+            if not os.path.exists(path) or override:
+                # Make jars directory if needed
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                
+                # Run the compute function as the user did
+                result = compute_function(*args, **kwargs)
+                
+                # Pickle the object
+                with open(path, 'wb') as file:
+                    pickle.dump(result, file)
+            else:
+                # Unpickle the object
+                with open(path, 'rb') as file:
+                    result = pickle.load(file)
+                    
+            return result
+        
+        return compute_and_cache
+    
+    return compute_and_cache_decorator
+```
+
+## STEP 2: STUDY SITE
+
+For this analysis, you will use a watershed from the [Water Boundary
+Dataset](https://www.usgs.gov/national-hydrography/access-national-hydrography-products),
+HU12 watersheds (WBDHU12.shp).
+
+<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
+<li>Download the Water Boundary Dataset for region 8 (Mississippi)</li>
+<li>Select watershed 080902030506</li>
+<li>Generate a site map of the watershed</li>
+</ol>
+<p>Try to use the <strong>caching decorator</strong></p></div></div>
+
+We chose this watershed because it covers parts of New Orleans an is
+near the Mississippi Delta. Deltas are boundary areas between the land
+and the ocean, and as a result tend to contain a rich variety of
+different land cover and land use types.
+
+<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-response"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div></div><div class="callout-body-container callout-body"><p>Write a 2-3 sentence <strong>site description</strong> (with
+citations) of this area that helps to put your analysis in context.</p></div></div>
+
+**YOUR SITE DESCRIPTION HERE**
+
+## STEP 3: MULTISPECTRAL DATA
+
+### Search for data
+
+<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
+<li>Log in to the <code>earthaccess</code> service using your Earthdata
+credentials:
+<code>python      earthaccess.login(persist=True)</code></li>
+<li>Modify the following sample code to search for granules of the
+HLSL30 product overlapping the watershed boundary from May to October
+2023 (there should be 76 granules):
+<code>python      results = earthaccess.search_data(          short_name="...",          cloud_hosted=True,          bounding_box=tuple(gdf.total_bounds),          temporal=("...", "..."),      )</code></li>
+</ol></div></div>
+
+
+```
+# Log in to earthaccess
+
+# Search for HLS tiles
+```
+
+### Compile information about each granule
+
+I recommend building a GeoDataFrame, as this will allow you to plot the
+granules you are downloading and make sure they line up with your
+shapefile. You could also use a DataFrame, dictionary, or a custom
+object to store this information.
+
+<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
+<li>For each search result:
+<ol type="1">
+<li>Get the following information (HINT: look at the [‘umm’] values for
+each search result):
+<ul>
+<li>granule id (UR)</li>
+<li>datetime</li>
+<li>geometry (HINT: check out the shapely.geometry.Polygon class to
+convert points to a Polygon)</li>
+</ul></li>
+<li>Open the granule files. I recomment opening one granule at a time,
+e.g. with (<code>earthaccess.open([result]</code>).</li>
+<li>For each file (band), get the following information:
+<ul>
+<li>file handler returned from <code>earthaccess.open()</code></li>
+<li>tile id</li>
+<li>band number</li>
+</ul></li>
+</ol></li>
+<li>Compile all the information you collected into a GeoDataFrame</li>
+</ol></div></div>
+
+
+```
+# Loop through each granule
+
+    # Get granule information
+
+    # Get URL
+
+    # Build metadata DataFrame rows
+
+# Concatenate metadata DataFrame
+```
+
+### Open, crop, and mask data
+
+This will be the most resource-intensive step. I recommend caching your
+results using the `cached` decorator or by writing your own caching
+code. I also recommend testing this step with one or two dates before
+running the full computation.
+
+This code should include at least one **function** including a
+numpy-style docstring. A good place to start would be a function for
+opening a single masked raster, applying the appropriate scale
+parameter, and cropping.
+
+<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
+<li>For each granule:
+<ol type="1">
+<li><p>Open the Fmask band, crop, and compute a quality mask for the
+granule. You can use the following code as a starting point, making sure
+that <code>mask_bits</code> contains the quality bits you want to
+consider: ```python # Expand into a new dimension of binary bits bits =
+( np.unpackbits(da.astype(np.uint8), bitorder=‘little’)
+.reshape(da.shape + (-1,)) )</p>
+<p># Select the required bits and check if any are flagged mask =
+np.prod(bits[…, mask_bits]==0, axis=-1) ```</p></li>
+<li><p>For each band that starts with ‘B’:</p>
+<ol type="1">
+<li>Open the band, crop, and apply the scale factor</li>
+<li>Name the DataArray after the band using the <code>.name</code>
+attribute</li>
+<li>Apply the cloud mask using the <code>.where()</code> method</li>
+<li>Store the DataArray in your data structure (e.g. adding a
+GeoDataFrame column with the DataArray in it. Note that you will need to
+remove the rows for unused bands)</li>
+</ol></li>
+</ol></li>
+</ol></div></div>
+
+
+```
+# Loop through each image
+
+    # Open granule cloud cover
+
+    # Compute cloud mask
+
+    # Loop through each spectral band
+
+        # Open, crop, and mask the band
+
+        # Add the DataArray to the metadata DataFrame row
+
+    # Reassemble the metadata DataFrame
+```
+
+### Merge and Composite Data
+
+You will notice for this watershed that: 1. The raster data for each
+date are spread across 4 granules 2. Any given image is incomplete
+because of clouds
+
+<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
+<li><p>For each band:</p>
+<ol type="1">
+<li><p>For each date:</p>
+<ol type="1">
+<li>Merge all 4 granules</li>
+<li>Mask any negative values created by interpolating from the nodata
+value of -9999 (<code>rioxarray</code> should account for this, but
+doesn’t appear to when merging. If you leave these values in they will
+create problems down the line)</li>
+</ol></li>
+<li><p>Concatenate the merged DataArrays along a new date
+dimension</p></li>
+<li><p>Take the mean in the date dimension to create a composite image
+that fills cloud gaps</p></li>
+<li><p>Add the band as a dimension, and give the DataArray a
+name</p></li>
+</ol></li>
+<li><p>Concatenate along the band dimension</p></li>
+</ol></div></div>
+
+
+```
+# Merge and composite and image for each band
+
+        # Merge granules for each date
+
+        # Mask negative values
+
+    # Composite images across dates
+```
+
+## STEP 4: K-MEANS
+
+Cluster your data by spectral signature using the k-means algorithm.
+
+<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><ol type="1">
+<li>Convert your DataArray into a <strong>tidy</strong> DataFrame of
+reflectance values (hint: check out the <code>.to_dataframe()</code> and
+<code>.unstack()</code> methods)</li>
+<li>Filter out all rows with no data (all 0s or any N/A values)</li>
+<li>Fit a k-means model. You can experiment with the number of groups to
+find what works best.</li>
+</ol></div></div>
+
+
+```
+# Convert spectral DataArray to a tidy DataFrame
+
+# Running the fit and predict functions at the same time.
+# We can do this since we don't have target data.
+
+# Add the predicted values back to the model DataFrame
+```
+
+## STEP 5: PLOT
+
+<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-task"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Try It</div></div><div class="callout-body-container callout-body"><p>Create a plot that shows the k-means clusters next to an RGB image of
+the area. You may need to brighten your RGB image by multiplying it by
+10. The code for reshaping and plotting the clusters is provided for you
+below, but you will have to create the RGB plot yourself!</p>
+<p>So, what is <code>.sortby(['x', 'y'])</code> doing for us? Try the
+code without it and find out.</p></div></div>
+
+
+```
+# Plot the k-means clusters
+(
+    rgb_plot
+    + 
+    model_df.clusters.to_xarray().sortby(['x', 'y']).hvplot(
+        cmap="Colorblind", aspect='equal') 
+)
+```
+
+<link rel="stylesheet" type="text/css" href="./assets/styles.css"><div class="callout callout-style-default callout-titled callout-respond"><div class="callout-header"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Reflect and Respond</div></div><div class="callout-body-container callout-body"><p>Don’t forget to interpret your plot!</p></div></div>
+
+**YOUR PLOT HEADLINE AND DESCRIPTION HERE**
