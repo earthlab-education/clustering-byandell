@@ -26,122 +26,30 @@ NSIDC](https://github.com/nsidc/earthaccess):
 
 ## STEP 1: SET UP
 
-- Import all libraries you will need for this analysis
-- Configure GDAL parameters to help avoid connection errors:
-  
-```python
-os.environ["GDAL_HTTP_MAX_RETRY"] = "5"
-os.environ["GDAL_HTTP_RETRY_DELAY"] = "1"
-```
-
-```{python}
-import os
-import pickle
-import re
-import warnings
-
-import cartopy.crs as ccrs
-import earthaccess
-import earthpy as et
-import geopandas as gpd
-import geoviews as gv
-import hvplot.pandas
-import hvplot.xarray
-import numpy as np
-import pandas as pd
-import rioxarray as rxr
-import rioxarray.merge as rxrmerge
-from tqdm.notebook import tqdm
-import xarray as xr
-from shapely.geometry import Polygon
-from sklearn.cluster import KMeans
-
-os.environ["GDAL_HTTP_MAX_RETRY"] = "5"
-os.environ["GDAL_HTTP_RETRY_DELAY"] = "1"
-
-warnings.simplefilter('ignore')
-```
-
-Below you can find code for a caching **decorator** which you can use in
-your code. To use the decorator:
-
-```python
-@cached(key, override)
-def do_something(*args, **kwargs):
-    ...
-    return item_to_cache
-```
-
-This decorator will **pickle** the results of running the `do_something()` function,
+The code for a caching **decorator** is in
+[landmapy/cached.py](https://github.com/byandell-envsys/landmapy/blob/main/landmapy/cached.py),
+which you can use in your code.
+This decorator will **pickle** the results of running a `do_something()` function,
 and only run the code if the results do not already exist.
 To override the caching, for example temporarily after
 making changes to your code, set `override=True`.
-Note that to use the caching decorator, you must write your own function to perform each task!
-
+Note that to use the caching decorator, you must write your own function to perform each task.
+See examples in
+[landmapy/delta.py](https://github.com/byandell-envsys/landmapy/blob/main/landmapy/delta.py)
+and
+[landmapy/reflectance.py](https://github.com/byandell-envsys/landmapy/blob/main/landmapy/reflectance.py).
 
 ```{python}
-def cached(func_key, override=False):
-    """
-    A decorator to cache function results
-    
-    Parameters
-    ==========
-    key: str
-      File basename used to save pickled results
-    override: bool
-      When True, re-compute even if the results are already stored
-    """
-    def compute_and_cache_decorator(compute_function):
-        """
-        Wrap the caching function
-        
-        Parameters
-        ==========
-        compute_function: function
-          The function to run and cache results
-        """
-        def compute_and_cache(*args, **kwargs):
-            """
-            Perform a computation and cache, or load cached result.
-            
-            Parameters
-            ==========
-            args
-              Positional arguments for the compute function
-            kwargs
-              Keyword arguments for the compute function
-            """
-            # Add an identifier from the particular function call
-            if 'cache_key' in kwargs:
-                key = '_'.join((func_key, kwargs['cache_key']))
-            else:
-                key = func_key
-
-            path = os.path.join(
-                et.io.HOME, et.io.DATA_NAME, 'jars', f'{key}.pickle')
-            
-            # Check if the cache exists already or override caching
-            if not os.path.exists(path) or override:
-                # Make jars directory if needed
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                
-                # Run the compute function as the user did
-                result = compute_function(*args, **kwargs)
-                
-                # Pickle the object
-                with open(path, 'wb') as file:
-                    pickle.dump(result, file)
-            else:
-                # Unpickle the object
-                with open(path, 'rb') as file:
-                    result = pickle.load(file)
-                    
-            return result
-        
-        return compute_and_cache
-    
-    return compute_and_cache_decorator
+# pip install --quiet ~/Documents/GitHub/landmapy
 ```
+
+```{python}
+from landmapy.initial import robust_code
+
+robust_code()
+```
+
+**Watch out for override=True or False with `@cached().**
 
 ## STEP 2: STUDY SITE
 
@@ -153,43 +61,27 @@ HU12 watersheds (`W`BDHU12.shp`).
 - Select watershed `080902030506`
 - Generate a site map of the watershed
 
-Try to use the **caching decorator**
+Try to use the **caching decorator**.
 
 ```{python}
-@cached('wbd_08')
-def read_wbd_file(wbd_filename, huc_level, cache_key):
-    # Download and unzip
-    wbd_url = (
-        "https://prd-tnm.s3.amazonaws.com"
-        "/StagedProducts/Hydrography/WBD/HU2/Shape/"
-        f"{wbd_filename}.zip")
-    wbd_dir = et.data.get_data(url=wbd_url)
-                  
-    # Read desired data
-    wbd_path = os.path.join(wbd_dir, 'Shape', f'WBDHU{huc_level}.shp')
-    wbd_gdf = gpd.read_file(wbd_path, engine='pyogrio')
-    return wbd_gdf
-
-huc_level = 12
-wbd_gdf = read_wbd_file(
-    "WBD_08_HU2_Shape", huc_level, cache_key=f'hu{huc_level}')
-
-delta_gdf = (
-    wbd_gdf[wbd_gdf[f'huc{huc_level}']
-    .isin(['080902030506'])]
-    .dissolve()
-)
-
-(
-    delta_gdf.to_crs(ccrs.Mercator())
-    .hvplot(
-        alpha=.2, fill_color='white', 
-        tiles='EsriImagery', crs=ccrs.Mercator())
-    .opts(width=600, height=300)
-)
+from landmapy.delta import read_delta_gdf, plot_delta_gdf
 ```
 
-We chose this watershed because it covers parts of New Orleans an is
+```{python}
+#| label: fig-delta
+#| fig-cap: "Mississippi Delta Watershed"
+delta_gdf = read_delta_gdf()
+plot_delta_gdf(delta_gdf)
+```
+
+Alternative HV plot:
+
+```
+from landmapy.delta import hvplot_delta_gdf
+hvplot_delta_gdf(delta_gdf)
+```
+
+We chose this watershed because it covers parts of New Orleans and is
 near the Mississippi Delta.
 Deltas are boundary areas between the land and the ocean,
 and as a result tend to contain a rich variety of
@@ -202,134 +94,40 @@ that helps to put your analysis in context.
 
 ## STEP 3: MULTISPECTRAL DATA
 
-### Search for data
-
-- Log in to the `earthaccess` service using your Earthdata credentials:
-  
-```python
-earthaccess.login(persist=True)
-```
-
-- Modify the following sample code to search for granules of the
-`HLSL30` product overlapping the watershed boundary from May to October
-2023 (there should be 76 granules):
-
-```python
-results = earthaccess.search_data(
-    short_name="...",
-    cloud_hosted=True,
-    bounding_box=tuple(gdf.total_bounds),
-    temporal=("...", "..."))
-```
-
-```{python}
-# Log in to earthaccess
-earthaccess.login(persist=True)
-# Search for HLS tiles
-results = earthaccess.search_data(
-    short_name="HLSL30",
-    cloud_hosted=True,
-    bounding_box=tuple(delta_gdf.total_bounds),
-    temporal=("2024-06", "2024-08"),
-)
-```
-
-### Compile information about each granule
-
-I recommend building a GeoDataFrame, as this will allow you to plot the
-granules you are downloading and make sure they line up with your shapefile.
+Build a GeoDataFrame, which will allow you to plot the
+downloaded granules to make sure they line up with your shapefile.
 You could also use a DataFrame, dictionary, or a custom object to store this information.
 
+- [Unified Metadata Model (UMM)](https://www.earthdata.nasa.gov/about/esdis/eosdis/cmr/umm)
 - For each search result:
   - Get the following information (HINT: look at the [‘umm’] values for
 each search result):
     - granule id (UR)
     - datetime
-    - geometry (HINT: check out the shapely.geometry.
-Polygon class to convert points to a Polygon)
+    - geometry (HINT: check out the
+[shapely.geometry.Polygon](https://shapely.readthedocs.io/en/2.0.6/reference/shapely.Polygon.html)
+class to convert points to a Polygon)
   - Open the granule files.
-I recomment opening one granule at a time, e.g. with
-`earthaccess.open([result]`.
+Open one granule at a time with `earthaccess.open([result]`.
   - For each file (band), get the following information:
     - file handler returned from `earthaccess.open()`
     - tile id
     - band number
-- Compile all the information you collected into a GeoDataFrame
-
-```{python}
-def get_earthaccess_links(results):
-    url_re = re.compile(
-        r'\.(?P<tile_id>\w+)\.\d+T\d+\.v\d\.\d\.(?P<band>[A-Za-z0-9]+)\.tif')
-
-    # Loop through each granule
-    link_rows = []
-    url_dfs = []
-    for granule in tqdm(results):
-        # Get granule information
-        info_dict = granule['umm']
-        granule_id = info_dict['GranuleUR']
-        datetime = pd.to_datetime(
-            info_dict
-            ['TemporalExtent']['RangeDateTime']['BeginningDateTime'])
-        points = (
-            info_dict
-            ['SpatialExtent']['HorizontalSpatialDomain']['Geometry']['GPolygons'][0]
-            ['Boundary']['Points'])
-        geometry = Polygon(
-            [(point['Longitude'], point['Latitude']) for point in points])
-        
-        # Get URL
-        files = earthaccess.open([granule])
-
-        # Build metadata DataFrame
-        for file in files:
-            match = url_re.search(file.full_name)
-            if match is not None:
-                link_rows.append(
-                    gpd.GeoDataFrame(
-                        dict(
-                            datetime=[datetime],
-                            tile_id=[match.group('tile_id')],
-                            band=[match.group('band')],
-                            url=[file],
-                            geometry=[geometry]
-                        ),
-                        crs="EPSG:4326"
-                    )
-                )
-
-    # Concatenate metadata DataFrame
-    file_df = pd.concat(link_rows).reset_index(drop=True)
-    return file_df
-```
+- Compile all the information you collected into a GeoDataFrame.
 
 ### Open, crop, and mask data
 
 This will be the most resource-intensive step.
-I recommend caching your results using the `cached` decorator
-or by writing your own caching code.
+Cache results using the `cached` decorator.
 I also recommend testing this step with one or two dates before
 running the full computation.
-
-This code should include at least one **function** including a numpy-style docstring.
-A good place to start would be a function for opening a single masked raster,
-applying the appropriate scale parameter, and cropping.
+Consider a function for opening a single masked raster,
+applying the appropriate scale parameter and cropping.
 
 - For each granule:
   - Open the Fmask band, crop, and compute a quality mask for the granule.
 You can use the following code as a starting point, making sure
 that `mask_bits` contains the quality bits you want to consider:
-
-```python
-# Expand into a new dimension of binary bits 
-bits = (
-    np.unpackbits(
-        da.astype(np.uint8), bitorder=‘little’
-    ).reshape(da.shape + (-1,))
-)
-# Select the required bits and check if any are flagged mask
-flagged mask = np.prod(bits[…, mask_bits]==0, axis=-1)
-```
 
 - For each band that starts with ‘B’:
   - Open the band, crop, and apply the scale factor
@@ -340,83 +138,23 @@ flagged mask = np.prod(bits[…, mask_bits]==0, axis=-1)
 Note that you will need to remove the rows for unused bands)
 
 ```{python}
-@cached('delta_reflectance_da_df')
-def compute_reflectance_da(search_results, boundary_gdf):
-    """
-    Connect to files over VSI, crop, cloud mask, and wrangle
-    
-    Returns a single reflectance DataFrame 
-    with all bands as columns and
-    centroid coordinates and datetime as the index.
-    
-    Parameters
-    ==========
-    file_df : pd.DataFrame
-        File connection and metadata (datetime, tile_id, band, and url)
-    boundary_gdf : gpd.GeoDataFrame
-        Boundary use to crop the data
-    """
-    def open_dataarray(url, boundary_proj_gdf, scale=1, masked=True):
-        # Open masked DataArray
-        da = rxr.open_rasterio(url, masked=masked).squeeze() * scale
-        
-        # Reproject boundary if needed
-        if boundary_proj_gdf is None:
-            boundary_proj_gdf = boundary_gdf.to_crs(da.rio.crs)
-            
-        # Crop
-        cropped = da.rio.clip_box(*boundary_proj_gdf.total_bounds)
-        return cropped
-    
-    def compute_quality_mask(da, mask_bits=[1, 2, 3]):
-        """Mask out low quality data by bit"""
-        # Unpack bits into a new axis
-        bits = (
-            np.unpackbits(
-                da.astype(np.uint8), bitorder='little'
-            ).reshape(da.shape + (-1,))
-        )
+from landmapy.reflectance import compute_reflectance_da, merge_and_composite_arrays
+```
 
-        # Select the required bits and check if any are flagged
-        mask = np.prod(bits[..., mask_bits]==0, axis=-1)
-        return mask
+This is probably overkill, since we are already caching with pickle.
 
-    file_df = get_earthaccess_links(search_results)
-    
-    granule_da_rows= []
-    boundary_proj_gdf = None
-
-    # Loop through each image
-    group_iter = file_df.groupby(['datetime', 'tile_id'])
-    for (datetime, tile_id), granule_df in tqdm(group_iter):
-        print(f'Processing granule {tile_id} {datetime}')
-              
-        # Open granule cloud cover
-        cloud_mask_url = (
-            granule_df.loc[granule_df.band=='Fmask', 'url']
-            .values[0])
-        cloud_mask_cropped_da = open_dataarray(cloud_mask_url, boundary_proj_gdf, masked=False)
-
-        # Compute cloud mask
-        cloud_mask = compute_quality_mask(cloud_mask_cropped_da)
-
-        # Loop through each spectral band
-        da_list = []
-        df_list = []
-        for i, row in granule_df.iterrows():
-            if row.band.startswith('B'):
-                # Open, crop, and mask the band
-                band_cropped = open_dataarray(
-                    row.url, boundary_proj_gdf, scale=0.0001)
-                band_cropped.name = row.band
-                # Add the DataArray to the metadata DataFrame row
-                row['da'] = band_cropped.where(cloud_mask)
-                granule_da_rows.append(row.to_frame().T)
-    
-    # Reassemble the metadata DataFrame
-    return pd.concat(granule_da_rows)
-
-reflectance_da_df = compute_reflectance_da(results, delta_gdf)
+```{python}
+%store -r reflectance_da_df
+try:
+    reflectance_da_df
+except NameError:
+    from landmapy.earthaccess import search_earthaccess
+    results = search_earthaccess(delta_gdf, ("2023-05", "2023-09"))
+    reflectance_da_df = compute_reflectance_da(results, delta_gdf)
+    %store reflectance_da_df
+    print("reflectance_da_df created and stored")
+else:
+    print("reflectance_da_df retrieved from StoreMagic")
 ```
 
 ### Merge and Composite Data
@@ -437,35 +175,38 @@ If you leave these values in they will create problems down the line.)
   - Add the band as a dimension, and give the DataArray a name
 - Concatenate along the band dimension
 
+```{python}
+%store -r reflectance_da
+try:
+    reflectance_da
+except NameError:
+    reflectance_da = merge_and_composite_arrays(reflectance_da_df)
+    %store reflectance_da
+    print("reflectance_da created and stored")
+else:
+    print("reflectance_da retrieved from StoreMagic")
+```
 
 ```{python}
-@cached('delta_reflectance_da')
-def merge_and_composite_arrays(granule_da_df):
-    # Merge and composite and image for each band
-    df_list = []
-    da_list = []
-    for band, band_df in tqdm(granule_da_df.groupby('band')):
-        merged_das = []
-        for datetime, date_df in tqdm(band_df.groupby('datetime')):
-            # Merge granules for each date
-            merged_da = rxrmerge.merge_arrays(list(date_df.da))
-            # Mask negative values
-            merged_da = merged_da.where(merged_da>0)
-            merged_das.append(merged_da)
-            
-        # Composite images across dates
-        composite_da = xr.concat(merged_das, dim='datetime').median('datetime')
-        composite_da['band'] = int(band[1:])
-        composite_da.name = 'reflectance'
-        da_list.append(composite_da)
-        
-    return xr.concat(da_list, dim='band')
-
-reflectance_da = merge_and_composite_arrays(reflectance_da_df)
-reflectance_da
+reflectance_da.shape
 ```
 
 ## STEP 4: K-MEANS
+
+Looking at this with KS section
+The `reflectance_da` has `Band` (10 levels), `x,y`.
+See HLS user guide (look under module) Table 6.
+Bands 10,11 are thermal and in different units.
+Reflectance are scaled 0-1.
+
+- account for different scales
+- or drop these bands (preferred here)
+
+Steps:
+
+- remove bands 10,11
+- take care of NAs
+- reshape
 
 Cluster your data by spectral signature using the k-means algorithm.
 
@@ -476,17 +217,16 @@ Cluster your data by spectral signature using the k-means algorithm.
 find what works best.
 
 ```{python}
-# Convert spectral DataArray to a tidy DataFrame
-model_df = reflectance_da.to_dataframe().reflectance.unstack('band')
-model_df = model_df.drop(columns=[10, 11]).dropna()
+from landmapy.reflectance import reflectance_kmeans, reflectance_range
+```
 
-# Running the fit and predict functions at the same time.
-# We can do this since we don't have target data.
-prediction = KMeans(n_clusters=6).fit_predict(model_df.values)
+```{python}
+model_df = reflectance_kmeans(reflectance_da)
+```
 
-# Add the predicted values back to the model DataFrame
-model_df['clusters'] = prediction
-model_df
+```{python}
+# Check ranges.
+reflectance_range(model_df)
 ```
 
 ## STEP 5: PLOT
@@ -499,24 +239,31 @@ below, but you will have to create the RGB plot yourself!
 So, what is `.sortby(['x', 'y'])` doing for us? Try the
 code without it and find out.
 
+Notes on RGB plot.
+Uses `.sel()` method to select bands (see HLS user guide for band numbers).
+Use `.rgb()` method to plot.
+But numbers are 0-1 and need to be 8-bit integers;
+rescale to 0-255.
+Use `.astype()` method to convert type and
+`.where(rgb!=np.nan)` method to drop NAs
 
 ```{python}
-rgb = reflectance_da.sel(band=[4, 3, 2])
-rgb_uint8 = (rgb * 255).astype(np.uint8).where(rgb!=np.nan)
-rgb_bright = rgb_uint8 * 10
-rgb_sat = rgb_bright.where(rgb_bright < 255, 255)
+from landmapy.reflectance import reflectance_rgb, plot_cluster
 
-(
-    rgb_sat.hvplot.rgb( 
-        x='x', y='y', bands='band',
-        data_aspect=1,
-        xaxis=None, yaxis=None)
-    + 
-    model_df.clusters.to_xarray().sortby(['x', 'y']).hvplot(
-        cmap="Colorblind", aspect='equal') 
-)
+rgb_sat = reflectance_rgb(reflectance_da)
 ```
 
-Do not forget to interpret your plot!</p></div></div>
+```{python}
+#| label: fig-cluster
+plot_cluster(rgb_sat, model_df)
+```
+
+Above is not perfect. Alternative HV plot:
+
+```
+hvplot_cluster(rgb_sat, model_df)
+```
+
+Interpret your plot.
 
 **YOUR PLOT HEADLINE AND DESCRIPTION HERE**
