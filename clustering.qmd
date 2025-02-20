@@ -64,7 +64,8 @@ HU12 watersheds (`W`BDHU12.shp`).
 Try to use the **caching decorator**.
 
 ```{python}
-from landmapy.delta import read_delta_gdf, plot_delta_gdf
+from landmapy.delta import read_delta_gdf
+from landmapy.plot import plot_delta_gdf
 ```
 
 ```{python}
@@ -77,7 +78,7 @@ plot_delta_gdf(delta_gdf)
 Alternative HV plot:
 
 ```
-from landmapy.delta import hvplot_delta_gdf
+from landmapy.hvplot import hvplot_delta_gdf
 hvplot_delta_gdf(delta_gdf)
 ```
 
@@ -248,7 +249,8 @@ Use `.astype()` method to convert type and
 `.where(rgb!=np.nan)` method to drop NAs
 
 ```{python}
-from landmapy.reflectance import reflectance_rgb, plot_cluster
+from landmapy.reflectance import reflectance_rgb
+from landmapy.plot import plot_cluster
 
 rgb_sat = reflectance_rgb(reflectance_da)
 ```
@@ -261,6 +263,7 @@ plot_cluster(rgb_sat, model_df)
 Above is not perfect. Alternative HV plot:
 
 ```
+from landmapy.hvplot import hvplot_cluster
 hvplot_cluster(rgb_sat, model_df)
 ```
 

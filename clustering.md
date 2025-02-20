@@ -65,7 +65,8 @@ Try to use the **caching decorator**.
 
 ::: {.cell execution_count="3"}
 ``` {.python .cell-code}
-from landmapy.delta import read_delta_gdf, plot_delta_gdf
+from landmapy.delta import read_delta_gdf
+from landmapy.plot import plot_delta_gdf
 ```
 :::
 
@@ -82,7 +83,7 @@ plot_delta_gdf(delta_gdf)
 
 Alternative HV plot:
 
-    from landmapy.delta import hvplot_delta_gdf
+    from landmapy.hvplot import hvplot_delta_gdf
     hvplot_delta_gdf(delta_gdf)
 
 We chose this watershed because it covers parts of New Orleans and is
@@ -212,7 +213,7 @@ else:
 reflectance_da.shape
 ```
 
-::: {.cell-output .cell-output-display execution_count="34"}
+::: {.cell-output .cell-output-display execution_count="21"}
     (10, 556, 624)
 :::
 ::::
@@ -259,7 +260,7 @@ model_df = reflectance_kmeans(reflectance_da)
 reflectance_range(model_df)
 ```
 
-::: {.cell-output .cell-output-display execution_count="37"}
+::: {.cell-output .cell-output-display execution_count="24"}
 <div>
 <style scoped>
     .dataframe tbody tr th:only-of-type {
@@ -309,7 +310,8 @@ method to convert type and `.where(rgb!=np.nan)` method to drop NAs
 
 ::: {.cell execution_count="12"}
 ``` {.python .cell-code}
-from landmapy.reflectance import reflectance_rgb, plot_cluster
+from landmapy.reflectance import reflectance_rgb
+from landmapy.plot import plot_cluster
 
 rgb_sat = reflectance_rgb(reflectance_da)
 ```
@@ -327,6 +329,7 @@ plot_cluster(rgb_sat, model_df)
 
 Above is not perfect. Alternative HV plot:
 
+    from landmapy.hvplot import hvplot_cluster
     hvplot_cluster(rgb_sat, model_df)
 
 Interpret your plot.
