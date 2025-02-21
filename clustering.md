@@ -144,7 +144,7 @@ and cropping.
 
 ::: {.cell execution_count="5"}
 ``` {.python .cell-code}
-from landmapy.reflectance import compute_reflectance_da, merge_and_composite_arrays
+from landmapy.reflect import compute_reflectance_da, merge_and_composite_arrays
 ```
 :::
 
@@ -244,7 +244,7 @@ Cluster your data by spectral signature using the k-means algorithm.
 
 ::: {.cell execution_count="9"}
 ``` {.python .cell-code}
-from landmapy.reflectance import reflectance_kmeans, reflectance_range
+from landmapy.reflect import reflectance_kmeans, reflectance_range
 ```
 :::
 
@@ -310,7 +310,7 @@ method to convert type and `.where(rgb!=np.nan)` method to drop NAs
 
 ::: {.cell execution_count="12"}
 ``` {.python .cell-code}
-from landmapy.reflectance import reflectance_rgb
+from landmapy.reflect import reflectance_rgb
 from landmapy.plot import plot_cluster
 
 rgb_sat = reflectance_rgb(reflectance_da)
