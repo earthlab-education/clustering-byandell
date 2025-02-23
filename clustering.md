@@ -65,7 +65,7 @@ Try to use the **caching decorator**.
 
 ::: {.cell execution_count="3"}
 ``` {.python .cell-code}
-from landmapy.delta import read_delta_gdf
+from landmapy.reflect import read_delta_gdf
 from landmapy.plot import plot_delta_gdf
 ```
 :::

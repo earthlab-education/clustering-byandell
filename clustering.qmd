@@ -64,7 +64,7 @@ HU12 watersheds (`W`BDHU12.shp`).
 Try to use the **caching decorator**.
 
 ```{python}
-from landmapy.delta import read_delta_gdf
+from landmapy.reflect import read_delta_gdf
 from landmapy.plot import plot_delta_gdf
 ```
 
