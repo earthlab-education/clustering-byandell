@@ -40,7 +40,8 @@ and
 [landmapy/reflectance.py](https://github.com/byandell-envsys/landmapy/blob/main/landmapy/reflectance.py).
 
 ```{python}
-# pip install --quiet ~/Documents/GitHub/landmapy
+#| eval: false
+pip install --quiet ~/Documents/GitHub/landmapy
 ```
 
 ```{python}
@@ -56,9 +57,29 @@ robust_code()
 For this analysis, you will use a watershed from the
 [Water Boundary Dataset](https://www.usgs.gov/national-hydrography/access-national-hydrography-products),
 HU12 watersheds (`W`BDHU12.shp`).
+This involves drilling down under the
+**Watershed Boundary Dataset (WBD)** section of the page
+through the AWS site linked via
+[Download the WBD by 2-digit Hydrologic Unit (HU2)](https://prd-tnm.s3.amazonaws.com/index.html?prefix=StagedProducts/Hydrography/WBD/HU2/),
+to the `Shape` directory and the specific entry in the folder,
+coded as `f"WBD_{region}_HU2_Shape.zip"` for `region = '08`.
+We use the `@cached('wbd_08')` decorator to pull out the shape
+file from this zip file,
+`f'WBDHU{huc_level}.shp'`
+with
+[Hydrologic Unit Code (HUC)](https://nas.er.usgs.gov/hucs.aspx)
+`huc_level = 12`.
 
-- Download the Water Boundary Dataset for region 8 (Mississippi)
+One way to get the HUC Code is to go to the
+[TNM Download (v2.0)](https://apps.nationalmap.gov/downloader/)
+under **Data** on left, check **Watershed Boundary Dataset (WBD)**,
+and click `Show` next to that text.
+A dense overlay will appear;
+zoom in to desired region and look for code like `HUC 12-070900020604` (for Lake Mendota).
+
+- Download the Water Boundary Dataset for region '08' (Mississippi)
 - Select watershed `080902030506`
+(Plaquemines Parish, bordering Lake Lery and Grand Lake)
 - Generate a site map of the watershed
 
 Try to use the **caching decorator**.
@@ -69,9 +90,24 @@ from landmapy.plot import plot_delta_gdf
 ```
 
 ```{python}
+#| eval: false
+%run read_delta.py
+```
+
+```{python}
+# Isle Royale: '041800000101'
+# Lake Mendota: '070900020604'
+# Lake Monona: '070900020702'
+delta_gdf = read2_delta_gdf(huc_region='07', watershed='070900020604',
+                   dissolve=True, func_key='wbd_07', override=True)
+plot_delta_gdf(delta_gdf)
+```
+
+```{python}
 #| label: fig-delta
 #| fig-cap: "Mississippi Delta Watershed"
-delta_gdf = read_delta_gdf()
+delta_gdf = read_delta_gdf(huc_region='08', watershed='080902030506',
+                   dissolve=True)
 plot_delta_gdf(delta_gdf)
 ```
 
