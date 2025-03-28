@@ -95,6 +95,7 @@ from landmapy.plot import plot_delta_gdf
 ```
 
 ```{python}
+#| eval: false
 # Isle Royale: '041800000101'
 # Lake Mendota: '070900020604'
 # Lake Monona: '070900020702'
